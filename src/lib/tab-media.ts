@@ -1,5 +1,20 @@
 import { useEffect, useState } from "react"
+import type { DiscCascadeItem } from "@/components/ui/disc-cascade-carousel"
 import { AUTO_POP_KEY, type MediaCommand, type RuntimeMessage, type TabMedia } from "@/shared/types"
+
+/** A tab's media as a disc: album art for the label, artist and album in the credits. */
+export function toDiscItem(t: TabMedia): DiscCascadeItem {
+  return {
+    title: t.title,
+    src: t.artwork,
+    alt: t.album || t.title,
+    credits: [
+      ...(t.artist ? [{ label: "Artist", value: t.artist }] : []),
+      ...(t.album ? [{ label: "Album", value: t.album }] : []),
+      { label: "Playing on", value: t.site },
+    ],
+  }
+}
 
 /** The tabs that have something to play, kept live by the background. */
 export function useTabMedia() {

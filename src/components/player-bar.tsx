@@ -9,7 +9,7 @@ type Props = {
   onFocus: () => void
 }
 
-function IconButton({ label, onClick, primary, children }: { label: string; onClick: () => void; primary?: boolean; children: ReactNode }) {
+export function IconButton({ label, onClick, primary, children }: { label: string; onClick: () => void; primary?: boolean; children: ReactNode }) {
   return (
     <button
       type="button"

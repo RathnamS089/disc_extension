@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react"
 import { Disc3, PictureInPicture2 } from "lucide-react"
-import DiscCascadeCarousel, { type DiscCascadeItem } from "@/components/ui/disc-cascade-carousel"
+import DiscCascadeCarousel from "@/components/ui/disc-cascade-carousel"
 import { PlayerBar } from "@/components/player-bar"
 import { cn } from "@/lib/utils"
-import { focusTab, sendCommand, useAutoPop, useTabMedia } from "./use-tab-media"
+import { focusTab, sendCommand, toDiscItem, useAutoPop, useTabMedia } from "@/lib/tab-media"
 
 const BAR_HEIGHT = "68px"
 
@@ -38,20 +38,7 @@ export default function App() {
   )
   const chosen = tabs[index]
 
-  const items = useMemo<DiscCascadeItem[]>(
-    () =>
-      tabs.map((t) => ({
-        title: t.title,
-        src: t.artwork,
-        alt: t.album || t.title,
-        credits: [
-          ...(t.artist ? [{ label: "Artist", value: t.artist }] : []),
-          ...(t.album ? [{ label: "Album", value: t.album }] : []),
-          { label: "Playing on", value: t.site },
-        ],
-      })),
-    [tabs],
-  )
+  const items = useMemo(() => tabs.map(toDiscItem), [tabs])
 
   if (!chosen) {
     return (

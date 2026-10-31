@@ -28,14 +28,14 @@ src/content/hook.ts  ──▶  src/content/bridge.ts  ──▶  src/background
 - **hook.ts** runs inside the page before the player loads. It wraps `navigator.mediaSession.setActionHandler` to keep the site's own play/pause/next/previous handlers (the ones media keys trigger) and calls them on command. Sites without handlers fall back to the `<audio>/<video>` element, or to clicking known next/previous buttons.
 - **bridge.ts** relays between the page and the extension (only the isolated world can use `chrome.runtime`).
 - **background** keeps the list of tabs with media in `chrome.storage.session` and forwards commands.
-- **mini.ts** pops a small now-playing card into the corner of the tab you are looking at whenever a track starts or changes, and hides it after 6 s (hovering keeps it open). Toggle it with the picture-in-picture button in the side panel.
+- **mini.ts** pops a 360×190 card into the corner of the tab you are looking at whenever a track starts or changes, and hides it after 6 s (hovering keeps it open). The card frames `src/mini` (the 3D disc carousel plus title and controls), created only while the card is showing. Toggle it with the picture-in-picture button in the side panel.
 - **Side panel** renders the tabs with `DiscCascadeCarousel` (album art becomes the disc label, the chosen disc spins while playing) and a lucide-react player bar.
 
 ## Project layout
 
 shadcn-style: components in `src/components/ui`, `cn()` in `src/lib/utils.ts`, Tailwind v4 via `@tailwindcss/vite`, `@/` → `src/`. Add shadcn components with `npx shadcn@latest add <name>`.
 
-The two content scripts must build to single files with no imports, because Chrome loads them as classic scripts. Keep their imports from `src/shared` type-only.
+The three content scripts must build to single files with no imports, because Chrome loads them as classic scripts. Keep their imports from `src/shared` type-only.
 
 ## Limits
 
