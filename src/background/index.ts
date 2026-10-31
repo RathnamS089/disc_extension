@@ -24,7 +24,22 @@ function publish() {
 /** Tell the mini player in whichever tab you're looking at. */
 async function toMini(msg: RuntimeMessage) {
   const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
-  if (active?.id != null) chrome.tabs.sendMessage(active.id, msg, { frameId: 0 }).catch(() => {})
+  if (active?.id != null) send(active.id, msg)
+}
+
+/** A tab with no mini player yet (discarded and restored, say) gets one, then the message. */
+async function send(tabId: number, msg: RuntimeMessage) {
+  try {
+    await chrome.tabs.sendMessage(tabId, msg, { frameId: 0 })
+  } catch {
+    if (msg.type !== "mini:state" || !msg.pop) return
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["mini.js"] })
+      await chrome.tabs.sendMessage(tabId, msg, { frameId: 0 })
+    } catch {
+      // a page we may not touch (chrome://, the Web Store, the new tab page)
+    }
+  }
 }
 
 async function autoPop(): Promise<boolean> {
@@ -99,6 +114,23 @@ chrome.runtime.onInstalled.addListener(async () => {
       }
     }),
   )
+})
+
+// Switching to another tab while something plays pops the card there too, so the
+// music follows you around. Not on the playing tab itself: its own player is right there.
+async function popOn(tabId: number) {
+  await ready
+  const playing = list().find((t) => t.playing)
+  if (!playing || playing.tabId === tabId || !(await autoPop())) return
+  send(tabId, { type: "mini:state", media: playing, pop: true })
+}
+
+chrome.tabs.onActivated.addListener(({ tabId }) => popOn(tabId))
+
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return
+  const [active] = await chrome.tabs.query({ active: true, windowId })
+  if (active?.id != null) popOn(active.id)
 })
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
