@@ -1,7 +1,7 @@
 // Keeps the list of tabs with something to play and passes commands to them.
 // The service worker can be stopped at any time, so the list lives in session storage.
 
-import type { RuntimeMessage, TabMedia } from "@/shared/types"
+import { AUTO_POP_KEY, type RuntimeMessage, type TabMedia } from "@/shared/types"
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
 
@@ -21,6 +21,17 @@ function publish() {
   chrome.runtime.sendMessage({ type: "media:list", tabs: all } satisfies RuntimeMessage).catch(() => {})
 }
 
+/** Tell the mini player in whichever tab you're looking at. */
+async function toMini(msg: RuntimeMessage) {
+  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+  if (active?.id != null) chrome.tabs.sendMessage(active.id, msg, { frameId: 0 }).catch(() => {})
+}
+
+async function autoPop(): Promise<boolean> {
+  const r = await chrome.storage.local.get(AUTO_POP_KEY)
+  return r[AUTO_POP_KEY] !== false
+}
+
 function hostOf(url?: string): string {
   try {
     return new URL(url ?? "").hostname.replace(/^www\./, "")
@@ -35,16 +46,23 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, reply) => {
     if (msg.type === "media:update") {
       const tab = sender.tab
       if (!tab?.id || sender.frameId !== 0) return
+      const prev = tabs.get(tab.id)
       if (msg.snapshot) {
-        tabs.set(tab.id, {
+        const media: TabMedia = {
           ...msg.snapshot,
           tabId: tab.id,
           windowId: tab.windowId,
           site: hostOf(tab.url),
           favIconUrl: tab.favIconUrl,
           updatedAt: Date.now(),
-        })
-      } else if (!tabs.delete(tab.id)) return
+        }
+        tabs.set(tab.id, media)
+        // pop on a start or a new track, not on every pause
+        const started = media.playing && (!prev?.playing || prev.title !== media.title || prev.artist !== media.artist)
+        toMini({ type: "mini:state", media, pop: started && (await autoPop()) })
+      } else if (tabs.delete(tab.id)) {
+        toMini({ type: "mini:gone", tabId: tab.id })
+      } else return
       publish()
     } else if (msg.type === "media:get") {
       reply(list())
@@ -65,5 +83,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, reply) => {
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   await ready
-  if (tabs.delete(tabId)) publish()
+  if (!tabs.delete(tabId)) return
+  toMini({ type: "mini:gone", tabId })
+  publish()
 })

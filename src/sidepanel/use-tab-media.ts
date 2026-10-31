@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import type { MediaCommand, RuntimeMessage, TabMedia } from "@/shared/types"
+import { AUTO_POP_KEY, type MediaCommand, type RuntimeMessage, type TabMedia } from "@/shared/types"
 
 /** The tabs that have something to play, kept live by the background. */
 export function useTabMedia() {
@@ -15,6 +15,22 @@ export function useTabMedia() {
   }, [])
 
   return tabs
+}
+
+/** Whether the mini player pops up by itself, kept in sync with storage. */
+export function useAutoPop(): [boolean, (on: boolean) => void] {
+  const [on, setOn] = useState(true)
+
+  useEffect(() => {
+    chrome.storage.local.get(AUTO_POP_KEY).then((r) => setOn(r[AUTO_POP_KEY] !== false))
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "local" && AUTO_POP_KEY in changes) setOn(changes[AUTO_POP_KEY].newValue !== false)
+    }
+    chrome.storage.onChanged.addListener(onChanged)
+    return () => chrome.storage.onChanged.removeListener(onChanged)
+  }, [])
+
+  return [on, (next) => chrome.storage.local.set({ [AUTO_POP_KEY]: next })]
 }
 
 export function sendCommand(tabId: number, cmd: MediaCommand) {

@@ -3,7 +3,7 @@ import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 
-// One build, four entries. The two content scripts must come out as single
+// One build, five entries. The three content scripts must come out as single
 // files with no imports (Chrome loads them as classic scripts), so they only
 // import types from src/shared.
 export default defineConfig({
@@ -19,6 +19,7 @@ export default defineConfig({
         background: resolve(__dirname, "src/background/index.ts"),
         hook: resolve(__dirname, "src/content/hook.ts"),
         bridge: resolve(__dirname, "src/content/bridge.ts"),
+        mini: resolve(__dirname, "src/content/mini.ts"),
       },
       output: {
         entryFileNames: (chunk) => (chunk.name === "sidepanel" ? "assets/[name]-[hash].js" : "[name].js"),

@@ -37,3 +37,9 @@ export type RuntimeMessage =
   | { type: "media:cmd"; tabId: number; cmd: MediaCommand }
   | { type: "media:focus"; tabId: number }
   | { type: "media:run"; cmd: MediaCommand }
+  // to the mini player in the active tab: `pop` opens it, otherwise it only refreshes what it shows
+  | { type: "mini:state"; media: TabMedia; pop: boolean }
+  | { type: "mini:gone"; tabId: number }
+
+/** chrome.storage.local key: whether the mini player pops up on its own. Default on. */
+export const AUTO_POP_KEY = "autoPop"

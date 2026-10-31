@@ -1,10 +1,31 @@
 import { useMemo, useState } from "react"
-import { Disc3 } from "lucide-react"
+import { Disc3, PictureInPicture2 } from "lucide-react"
 import DiscCascadeCarousel, { type DiscCascadeItem } from "@/components/ui/disc-cascade-carousel"
 import { PlayerBar } from "@/components/player-bar"
-import { focusTab, sendCommand, useTabMedia } from "./use-tab-media"
+import { cn } from "@/lib/utils"
+import { focusTab, sendCommand, useAutoPop, useTabMedia } from "./use-tab-media"
 
 const BAR_HEIGHT = "68px"
+
+function PopToggle() {
+  const [on, setOn] = useAutoPop()
+  const label = on ? "Mini player pops up on play: on" : "Mini player pops up on play: off"
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={on}
+      title={label}
+      onClick={() => setOn(!on)}
+      className={cn(
+        "absolute top-3 right-3 z-10 grid size-8 place-items-center rounded-full border border-border transition hover:bg-foreground/10",
+        on ? "text-foreground" : "text-muted-foreground opacity-60",
+      )}
+    >
+      <PictureInPicture2 className="size-4" />
+    </button>
+  )
+}
 
 export default function App() {
   const tabs = useTabMedia()
@@ -34,7 +55,8 @@ export default function App() {
 
   if (!chosen) {
     return (
-      <div className="grid h-full place-items-center p-8 text-center">
+      <div className="relative grid h-full place-items-center p-8 text-center">
+        <PopToggle />
         <div className="max-w-60">
           <Disc3 className="mx-auto mb-4 size-10 opacity-40" />
           <p className="text-sm font-semibold">Nothing playing</p>
@@ -48,7 +70,8 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
+      <PopToggle />
       <DiscCascadeCarousel
         items={items}
         index={index}

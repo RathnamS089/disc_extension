@@ -28,6 +28,7 @@ src/content/hook.ts  ──▶  src/content/bridge.ts  ──▶  src/background
 - **hook.ts** runs inside the page before the player loads. It wraps `navigator.mediaSession.setActionHandler` to keep the site's own play/pause/next/previous handlers (the ones media keys trigger) and calls them on command. Sites without handlers fall back to the `<audio>/<video>` element, or to clicking known next/previous buttons.
 - **bridge.ts** relays between the page and the extension (only the isolated world can use `chrome.runtime`).
 - **background** keeps the list of tabs with media in `chrome.storage.session` and forwards commands.
+- **mini.ts** pops a small now-playing card into the corner of the tab you are looking at whenever a track starts or changes, and hides it after 6 s (hovering keeps it open). Toggle it with the picture-in-picture button in the side panel.
 - **Side panel** renders the tabs with `DiscCascadeCarousel` (album art becomes the disc label, the chosen disc spins while playing) and a lucide-react player bar.
 
 ## Project layout
