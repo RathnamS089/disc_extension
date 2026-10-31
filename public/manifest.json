@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Disc Deck",
+  "version": "0.1.0",
+  "description": "See what's playing in your tabs as spinning discs, and control it from the side panel.",
+  "action": { "default_title": "Open Disc Deck" },
+  "side_panel": { "default_path": "src/sidepanel/index.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["sidePanel", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "js": ["hook.js"], "run_at": "document_start", "world": "MAIN" },
+    { "matches": ["<all_urls>"], "js": ["bridge.js"], "run_at": "document_start" }
+  ]
+}
