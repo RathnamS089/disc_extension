@@ -42,6 +42,23 @@ async function send(tabId: number, msg: RuntimeMessage) {
   }
 }
 
+/** Every tab's card, not just the active one: they all stay up while the music plays. */
+async function toAllMinis(msg: RuntimeMessage) {
+  const all = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] })
+  for (const t of all) if (t.id != null) chrome.tabs.sendMessage(t.id, msg, { frameId: 0 }).catch(() => {})
+}
+
+// The track whose card you closed: it stays closed on every tab until the next track.
+const trackKey = (t: TabMedia) => `${t.tabId}|${t.title}|${t.artist}`
+let dismissed: string | null = null
+chrome.storage.session.get("dismissed").then((r) => {
+  dismissed = (r.dismissed as string | undefined) ?? null
+})
+function setDismissed(key: string | null) {
+  dismissed = key
+  chrome.storage.session.set({ dismissed: key }).catch(() => {})
+}
+
 async function autoPop(): Promise<boolean> {
   const r = await chrome.storage.local.get(AUTO_POP_KEY)
   return r[AUTO_POP_KEY] !== false
@@ -74,11 +91,18 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, reply) => {
         tabs.set(tab.id, media)
         // pop on a start or a new track, not on every pause
         const started = media.playing && (!prev?.playing || prev.title !== media.title || prev.artist !== media.artist)
-        toMini({ type: "mini:state", media, pop: started && (await autoPop()) })
+        if (started && dismissed !== trackKey(media)) setDismissed(null)
+        toMini({ type: "mini:state", media, pop: started && !dismissed && (await autoPop()) })
       } else if (tabs.delete(tab.id)) {
-        toMini({ type: "mini:gone", tabId: tab.id })
+        toAllMinis({ type: "mini:gone", tabId: tab.id })
       } else return
       publish()
+    } else if (msg.type === "mini:ready") {
+      if (sender.tab?.id != null && sender.tab.active && sender.frameId === 0) popOn(sender.tab.id)
+    } else if (msg.type === "mini:dismiss") {
+      const t = tabs.get(msg.tabId)
+      if (t) setDismissed(trackKey(t))
+      toAllMinis({ type: "mini:gone", tabId: msg.tabId })
     } else if (msg.type === "media:get") {
       reply(list())
     } else if (msg.type === "media:cmd") {
@@ -117,11 +141,11 @@ chrome.runtime.onInstalled.addListener(async () => {
 })
 
 // Switching to another tab while something plays pops the card there too, so the
-// music follows you around. Not on the playing tab itself: its own player is right there.
+// music follows you around, unless you closed it for this track.
 async function popOn(tabId: number) {
   await ready
   const playing = list().find((t) => t.playing)
-  if (!playing || playing.tabId === tabId || !(await autoPop())) return
+  if (!playing || dismissed === trackKey(playing) || !(await autoPop())) return
   send(tabId, { type: "mini:state", media: playing, pop: true })
 }
 
@@ -136,6 +160,6 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   await ready
   if (!tabs.delete(tabId)) return
-  toMini({ type: "mini:gone", tabId })
+  toAllMinis({ type: "mini:gone", tabId })
   publish()
 })
