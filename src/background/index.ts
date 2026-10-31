@@ -81,6 +81,26 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, reply) => {
   return msg.type === "media:get" // keep the channel open for the async reply
 })
 
+// Chrome only adds content scripts to pages loaded after the extension is, so a
+// tab already open on install, update or reload would stay invisible until you
+// refreshed it. Add them to those tabs now. The bridge goes first so it's
+// listening when the hook reports.
+chrome.runtime.onInstalled.addListener(async () => {
+  const open = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] })
+  await Promise.all(
+    open.map(async (t) => {
+      if (t.id == null || t.discarded) return
+      const target = { tabId: t.id }
+      try {
+        await chrome.scripting.executeScript({ target, files: ["bridge.js", "mini.js"] })
+        await chrome.scripting.executeScript({ target, files: ["hook.js"], world: "MAIN" })
+      } catch {
+        // a page we may not touch (Web Store, error pages)
+      }
+    }),
+  )
+})
+
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   await ready
   if (!tabs.delete(tabId)) return

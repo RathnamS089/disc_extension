@@ -27,7 +27,8 @@ export type TabMedia = MediaSnapshot & {
 export const HOOK = "disc-deck:hook"
 export const BRIDGE = "disc-deck:bridge"
 export type HookMessage = { source: typeof HOOK; snapshot: MediaSnapshot | null }
-export type BridgeMessage = { source: typeof BRIDGE; cmd: MediaCommand }
+/** `sync` asks the hook to report again even if nothing changed: a new bridge has arrived. */
+export type BridgeMessage = { source: typeof BRIDGE; cmd: MediaCommand } | { source: typeof BRIDGE; sync: true }
 
 // extension messages
 export type RuntimeMessage =

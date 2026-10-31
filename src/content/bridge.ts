@@ -8,7 +8,11 @@ const BRIDGE: BridgeMessage["source"] = "disc-deck:bridge"
 
 function send(msg: RuntimeMessage) {
   // The extension may have been reloaded under this page; drop the message then.
-  chrome.runtime.sendMessage(msg).catch(() => {})
+  try {
+    chrome.runtime.sendMessage(msg).catch(() => {})
+  } catch {
+    // context invalidated: this copy is orphaned and a fresh one has replaced it
+  }
 }
 
 window.addEventListener("message", (e) => {
@@ -22,3 +26,6 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage) => {
 })
 
 window.addEventListener("pagehide", () => send({ type: "media:update", snapshot: null }))
+
+// If a hook is already running here (this bridge was added to an open tab), have it report afresh.
+window.postMessage({ source: BRIDGE, sync: true } satisfies BridgeMessage, "*")
