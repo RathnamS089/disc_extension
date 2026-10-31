@@ -1,5 +1,5 @@
 import { resolve } from "node:path"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 
@@ -7,9 +7,17 @@ import tailwindcss from "@tailwindcss/vite"
 // files with no imports (Chrome loads them as classic scripts), so they only
 // import types from src/shared.
 const SCRIPTS = ["background", "hook", "bridge", "mini"]
+const CONTENT_SCRIPTS = ["hook", "bridge", "mini"]
+
+// Classic scripts share one global scope per world, so a second copy in the same tab (the install-time injection on top
+// of an orphaned one from before a reload) dies on "Identifier 'n' has already been declared". Give each its own scope.
+const ownScope: Plugin = {
+  name: "content-script-scope",
+  renderChunk: (code, chunk) => (CONTENT_SCRIPTS.includes(chunk.name) ? `(() => {\n${code}\n})();\n` : null),
+}
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), ownScope],
   resolve: { alias: { "@": resolve(__dirname, "src") } },
   build: {
     outDir: "dist",
