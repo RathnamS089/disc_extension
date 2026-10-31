@@ -52,7 +52,8 @@ export default function MiniApp() {
 
   if (!chosen) return <div style={{ height: HEIGHT, background: "#0b0b0d" }} />
 
-  const viewing = Math.min(view, current)
+  // before the first list arrives there is no disc to view (current is -1); anything out of range means the playing one
+  const viewing = view >= 0 && view <= current ? view : current
   const queued = viewing < current ? { index: current - 1 - viewing, item: queue[current - 1 - viewing] } : null
   const playQueuedItem = () => queued && playQueued(chosen.tabId, queued.index, queued.item.title)
 
