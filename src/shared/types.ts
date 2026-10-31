@@ -44,6 +44,9 @@ export type RuntimeMessage =
   // from the mini player: a page has loaded and can show the card; the card was closed
   | { type: "mini:ready" }
   | { type: "mini:dismiss"; tabId: number }
+  // the card moved into (or out of) a floating Picture-in-Picture window; in-page cards stand down meanwhile
+  | { type: "mini:pip"; open: boolean }
+  | { type: "mini:hide" }
 
 /** chrome.storage.local key: whether the mini player pops up on its own. Default on. */
 export const AUTO_POP_KEY = "autoPop"

@@ -59,6 +59,17 @@ function setDismissed(key: string | null) {
   chrome.storage.session.set({ dismissed: key }).catch(() => {})
 }
 
+// The tab holding the floating Picture-in-Picture card, if one is open. It shows on
+// every tab and app, so no in-page card pops while it's up.
+let pipTab: number | null = null
+chrome.storage.session.get("pipTab").then((r) => {
+  pipTab = (r.pipTab as number | undefined) ?? null
+})
+function setPipTab(id: number | null) {
+  pipTab = id
+  chrome.storage.session.set({ pipTab: id }).catch(() => {})
+}
+
 async function autoPop(): Promise<boolean> {
   const r = await chrome.storage.local.get(AUTO_POP_KEY)
   return r[AUTO_POP_KEY] !== false
@@ -92,13 +103,19 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, reply) => {
         // pop on a start or a new track, not on every pause
         const started = media.playing && (!prev?.playing || prev.title !== media.title || prev.artist !== media.artist)
         if (started && dismissed !== trackKey(media)) setDismissed(null)
-        toMini({ type: "mini:state", media, pop: started && !dismissed && (await autoPop()) })
+        toMini({ type: "mini:state", media, pop: started && !dismissed && pipTab == null && (await autoPop()) })
       } else if (tabs.delete(tab.id)) {
         toAllMinis({ type: "mini:gone", tabId: tab.id })
       } else return
       publish()
     } else if (msg.type === "mini:ready") {
       if (sender.tab?.id != null && sender.tab.active && sender.frameId === 0) popOn(sender.tab.id)
+    } else if (msg.type === "mini:pip") {
+      if (sender.tab?.id == null) return
+      if (msg.open) {
+        setPipTab(sender.tab.id)
+        toAllMinis({ type: "mini:hide" })
+      } else if (pipTab === sender.tab.id) setPipTab(null)
     } else if (msg.type === "mini:dismiss") {
       const t = tabs.get(msg.tabId)
       if (t) setDismissed(trackKey(t))
@@ -145,7 +162,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 async function popOn(tabId: number) {
   await ready
   const playing = list().find((t) => t.playing)
-  if (!playing || dismissed === trackKey(playing) || !(await autoPop())) return
+  if (!playing || pipTab != null || dismissed === trackKey(playing) || !(await autoPop())) return
   send(tabId, { type: "mini:state", media: playing, pop: true })
 }
 
@@ -157,8 +174,14 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (active?.id != null) popOn(active.id)
 })
 
+// the floating card closes with the page that opened it
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (tabId === pipTab && change.status === "loading") setPipTab(null)
+})
+
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   await ready
+  if (tabId === pipTab) setPipTab(null)
   if (!tabs.delete(tabId)) return
   toAllMinis({ type: "mini:gone", tabId })
   publish()

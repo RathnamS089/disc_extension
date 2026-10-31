@@ -34,13 +34,22 @@ iframe{display:block;width:100%;height:100%;border:0;color-scheme:dark}
 .x{position:absolute;top:10px;right:10px;display:grid;place-items:center;width:22px;height:22px;margin:0;padding:0;
   border:1px solid rgba(236,235,231,.18);border-radius:999px;background:rgba(18,18,21,.8);color:#ecebe7;cursor:pointer;
   opacity:0;transition:opacity .15s}
+.x.pip{right:38px}
 .card:hover .x,.x:focus-visible{opacity:1}
 @media (prefers-reduced-motion:reduce){.card{transition:none}}
 `
+const POP_OUT =
+  '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 10V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><rect x="2" y="13" width="9" height="7" rx="1"/></svg>'
 const CLOSE =
   '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
 
 type Pos = { right: number; bottom: number }
+
+// Document Picture-in-Picture: a small always-on-top window that floats over every
+// tab, the New Tab page and other apps, where no page script can reach. It needs a
+// click to open. Not in TypeScript's DOM types yet.
+type DocumentPiP = { requestWindow(o: { width: number; height: number }): Promise<Window> }
+const docPip = (window as Window & { documentPictureInPicture?: DocumentPiP }).documentPictureInPicture
 
 let card: HTMLElement | null = null
 let host: HTMLElement | null = null
@@ -98,10 +107,11 @@ function mount(): HTMLElement {
   }
   host = document.createElement("disc-deck-mini")
   const root = host.attachShadow({ mode: "closed" })
-  root.innerHTML = `<style>${CSS}</style><div class="card" role="region" aria-label="Now playing"><div class="grip" title="Drag to move"></div><button class="x" aria-label="Close">${CLOSE}</button></div>`
+  root.innerHTML = `<style>${CSS}</style><div class="card" role="region" aria-label="Now playing"><div class="grip" title="Drag to move"></div>${docPip ? `<button class="x pip" aria-label="Float over all tabs" title="Float over all tabs">${POP_OUT}</button>` : ""}<button class="x" aria-label="Close">${CLOSE}</button></div>`
   document.documentElement.appendChild(host)
   const c = root.querySelector(".card") as HTMLElement
-  c.querySelector(".x")!.addEventListener("click", () => {
+  c.querySelector(".pip")?.addEventListener("click", popOut)
+  c.querySelector(".x:not(.pip)")!.addEventListener("click", () => {
     hide()
     if (tabId != null) send({ type: "mini:dismiss", tabId })
   })
@@ -142,8 +152,31 @@ function hide() {
   }, 450)
 }
 
+/** Move the card into a floating window that follows you to every tab. */
+async function popOut() {
+  if (!docPip || tabId == null) return
+  let win: Window
+  try {
+    win = await docPip.requestWindow({ width: WIDTH, height: HEIGHT })
+  } catch {
+    return // no click to open it with, or the page doesn't allow it
+  }
+  const doc = win.document
+  doc.title = "Disc Deck"
+  doc.body.style.cssText = "margin:0;background:#0b0b0d;overflow:hidden"
+  const f = doc.createElement("iframe")
+  f.title = "Disc Deck mini player"
+  f.src = chrome.runtime.getURL(PAGE) + "?tab=" + tabId
+  f.style.cssText = "display:block;width:100vw;height:100vh;border:0;color-scheme:dark"
+  doc.body.appendChild(f)
+  win.addEventListener("pagehide", () => send({ type: "mini:pip", open: false }), { once: true })
+  hide()
+  send({ type: "mini:pip", open: true })
+}
+
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage) => {
   if (msg.type === "mini:state" && msg.pop) show(msg.media.tabId)
+  else if (msg.type === "mini:hide") hide()
   else if (msg.type === "mini:gone" && msg.tabId === tabId) {
     hide()
     tabId = null
