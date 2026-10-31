@@ -23,6 +23,8 @@ window.addEventListener("message", (e) => {
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage) => {
   if (msg.type === "media:run") window.postMessage({ source: BRIDGE, cmd: msg.cmd } satisfies BridgeMessage, "*")
+  else if (msg.type === "media:runQueue")
+    window.postMessage({ source: BRIDGE, queue: { index: msg.index, title: msg.title } } satisfies BridgeMessage, "*")
 })
 
 window.addEventListener("pagehide", () => send({ type: "media:update", snapshot: null }))

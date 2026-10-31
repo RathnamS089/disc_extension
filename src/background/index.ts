@@ -110,6 +110,9 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, reply) => {
         // the tab is gone or the page predates the extension
         if (tabs.delete(msg.tabId)) publish()
       })
+    } else if (msg.type === "media:queue") {
+      const run: RuntimeMessage = { type: "media:runQueue", index: msg.index, title: msg.title }
+      chrome.tabs.sendMessage(msg.tabId, run, { frameId: 0 }).catch(() => {})
     } else if (msg.type === "media:focus") {
       const t = tabs.get(msg.tabId)
       if (!t) return

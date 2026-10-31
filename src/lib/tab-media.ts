@@ -52,6 +52,11 @@ export function sendCommand(tabId: number, cmd: MediaCommand) {
   chrome.runtime.sendMessage({ type: "media:cmd", tabId, cmd } satisfies RuntimeMessage)
 }
 
+/** Start the tab's queue item at `index` (its title in case the queue moved). */
+export function playQueued(tabId: number, index: number, title: string) {
+  chrome.runtime.sendMessage({ type: "media:queue", tabId, index, title } satisfies RuntimeMessage)
+}
+
 export function focusTab(tabId: number) {
   chrome.runtime.sendMessage({ type: "media:focus", tabId } satisfies RuntimeMessage)
 }

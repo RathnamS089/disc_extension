@@ -7,7 +7,7 @@
 // update. Then it may find an earlier copy of itself already in the page, and
 // leaves that one in charge so commands don't run twice.
 
-import type { BridgeMessage, HookMessage, MediaCommand, MediaSnapshot } from "@/shared/types"
+import type { BridgeMessage, HookMessage, MediaCommand, MediaSnapshot, QueueItem } from "@/shared/types"
 
 const HOOK: HookMessage["source"] = "disc-deck:hook"
 const BRIDGE: BridgeMessage["source"] = "disc-deck:bridge"
@@ -25,6 +25,68 @@ const PREV_BUTTONS = [
   ".skipControl__previous",
   "tp-yt-paper-icon-button.previous-button",
 ]
+
+const QUEUE_MAX = 8
+
+// The page's own "Up next" list, read off its DOM. Each row knows how to start itself.
+type QueueRow = QueueItem & { play: () => void }
+
+const text = (root: Element, sel: string) => root.querySelector(sel)?.textContent?.trim() ?? ""
+
+function img(root: Element): string | undefined {
+  const src = root.querySelector("img")?.src
+  if (!src || src.startsWith("data:")) return undefined
+  // YouTube Music hands out 60px thumbnails; ask for one big enough for a disc label
+  return src.replace(/=w\d+-h\d+/, "=w544-h544")
+}
+
+/** Rows after the selected one, or every row when nothing is marked as playing. */
+function after<T extends Element>(rows: T[]): T[] {
+  const i = rows.findIndex((r) => r.hasAttribute("selected"))
+  return rows.slice(i + 1, i + 1 + QUEUE_MAX)
+}
+
+function readQueue(): QueueRow[] {
+  try {
+    return queueRows()
+  } catch {
+    return [] // a page whose markup moved on; what's playing still reports
+  }
+}
+
+function queueRows(): QueueRow[] {
+  const host = location.hostname
+  if (host === "music.youtube.com") {
+    // the queue panel's rows, with Automix suggestions after them in page order
+    const rows = Array.from(document.querySelectorAll("ytmusic-player-queue ytmusic-player-queue-item"))
+    return after(rows).map((r) => ({
+      title: text(r, ".song-title"),
+      artist: text(r, ".byline"),
+      artwork: img(r),
+      play: () => (r.querySelector<HTMLElement>("ytmusic-play-button-renderer") ?? r.querySelector<HTMLElement>(".song-info") ?? (r as HTMLElement)).click(),
+    }))
+  }
+  if (host.endsWith("youtube.com")) {
+    // a playlist's panel if there is one, else the suggestions beside the video
+    const list = Array.from(document.querySelectorAll("ytd-playlist-panel-renderer #items ytd-playlist-panel-video-renderer"))
+    if (list.length)
+      return after(list).map((r) => ({
+        title: text(r, "#video-title"),
+        artist: text(r, "#byline"),
+        artwork: img(r),
+        play: () => r.querySelector<HTMLElement>("a#wc-endpoint")?.click(),
+      }))
+    return Array.from(document.querySelectorAll("#secondary ytd-compact-video-renderer"))
+      .slice(0, QUEUE_MAX)
+      .map((r) => ({
+        title: text(r, "#video-title"),
+        artist: text(r, "ytd-channel-name #text"),
+        artwork: img(r),
+        play: () => r.querySelector<HTMLElement>("a#thumbnail")?.click(),
+      }))
+  }
+  return []
+}
 
 function install(ms: MediaSession | undefined) {
   const handlers = new Map<MediaSessionAction, MediaSessionActionHandler>()
@@ -112,6 +174,9 @@ function install(ms: MediaSession | undefined) {
       // A handler registered before a late install is out of reach, but the button fallbacks still skip.
       canNext: handlers.has("nexttrack"),
       canPrev: handlers.has("previoustrack"),
+      queue: readQueue()
+        .filter((q) => q.title)
+        .map(({ title, artist, artwork }) => ({ title, artist, artwork })),
     }
   }
 
@@ -131,6 +196,10 @@ function install(ms: MediaSession | undefined) {
     if ("sync" in m) {
       last = ""
       report()
+    } else if ("queue" in m) {
+      const rows = readQueue().filter((q) => q.title)
+      ;(rows[m.queue.index]?.title === m.queue.title ? rows[m.queue.index] : rows.find((q) => q.title === m.queue.title))?.play()
+      setTimeout(report, 300)
     } else run(m.cmd)
   })
 
