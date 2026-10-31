@@ -60,26 +60,34 @@ function img(root: Element): string | undefined {
   return undefined
 }
 
-/** Rows after the selected one, or every row when nothing is marked as playing. */
-function after<T extends Element>(rows: T[]): T[] {
-  const i = rows.findIndex((r) => r.hasAttribute("selected"))
-  return rows.slice(i + 1, i + 1 + QUEUE_MAX)
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/**
+ * The rows after the one playing now. The page marks that row `selected`, but only a
+ * moment after a skip or a step back, so the mark is trusted only when its title agrees
+ * with what's playing; otherwise the row is found by title. No row found means no queue,
+ * never the top of the list, which holds the songs already played.
+ */
+function after<T extends Element>(rows: T[], current: string, titleSel: string): T[] {
+  let i = rows.findIndex((r) => r.hasAttribute("selected"))
+  if (i < 0 || !same(text(rows[i], titleSel), current)) i = rows.findIndex((r) => same(text(r, titleSel), current))
+  return i < 0 ? [] : rows.slice(i + 1, i + 1 + QUEUE_MAX)
 }
 
-function readQueue(): QueueRow[] {
+function readQueue(current: string): QueueRow[] {
   try {
-    return queueRows()
+    return queueRows(current)
   } catch {
     return [] // a page whose markup moved on; what's playing still reports
   }
 }
 
-function queueRows(): QueueRow[] {
+function queueRows(current: string): QueueRow[] {
   const host = location.hostname
   if (host === "music.youtube.com") {
     // the queue panel's rows, with Automix suggestions after them in page order
     const rows = Array.from(document.querySelectorAll("ytmusic-player-queue ytmusic-player-queue-item"))
-    return after(rows).map((r) => ({
+    return after(rows, current, ".song-title").map((r) => ({
       title: text(r, ".song-title"),
       artist: text(r, ".byline"),
       artwork: img(r),
@@ -90,7 +98,7 @@ function queueRows(): QueueRow[] {
     // a playlist's panel if there is one, else the suggestions beside the video
     const list = Array.from(document.querySelectorAll("ytd-playlist-panel-renderer #items ytd-playlist-panel-video-renderer"))
     if (list.length)
-      return after(list).map((r) => ({
+      return after(list, current, "#video-title").map((r) => ({
         title: text(r, "#video-title"),
         artist: text(r, "#byline"),
         artwork: img(r),
@@ -181,12 +189,42 @@ function install(ms: MediaSession | undefined) {
     return best?.src
   }
 
+  // What came after each recent track, newest last. The page's queue always wins; this
+  // fills the gap while the page catches up after a skip or a step back, so the card
+  // shows the right next three at once instead of nothing (or the wrong ones).
+  const CACHE_MAX = 30
+  const nextOf = new Map<string, QueueItem[]>()
+  let shown: { key: string; queue: QueueItem[] } = { key: "", queue: [] }
+  const keyOf = (title: string, artist: string) => title.trim().toLowerCase() + "|" + artist.trim().toLowerCase()
+
+  function remember(key: string, queue: QueueItem[]) {
+    nextOf.delete(key) // re-insert so the map's order stays least recent first
+    nextOf.set(key, queue)
+    if (nextOf.size > CACHE_MAX) nextOf.delete(nextOf.keys().next().value!)
+  }
+
+  function queueFor(title: string, artist: string): QueueItem[] {
+    const key = keyOf(title, artist)
+    const live = readQueue(title)
+      .filter((q) => q.title)
+      .map(({ title, artist, artwork }) => ({ title, artist, artwork }))
+    let queue: QueueItem[] = live
+    if (live.length) remember(key, live)
+    else if (nextOf.has(key)) queue = nextOf.get(key)!
+    // skipped forward onto the first of the last queue we showed: the rest still follows
+    else if (shown.queue[0] && same(shown.queue[0].title, title)) queue = shown.queue.slice(1)
+    else if (shown.key === key) queue = shown.queue
+    shown = { key, queue }
+    return queue
+  }
+
   function snapshot(): MediaSnapshot | null {
     const meta = ms?.metadata
     const el = media()
     if (!meta?.title && !(el && el.duration > 0)) return null
+    const title = meta?.title || document.title
     return {
-      title: meta?.title || document.title,
+      title,
       artist: meta?.artist ?? "",
       album: meta?.album ?? "",
       artwork: meta ? largest(meta.artwork) : undefined,
@@ -194,9 +232,7 @@ function install(ms: MediaSession | undefined) {
       // A handler registered before a late install is out of reach, but the button fallbacks still skip.
       canNext: handlers.has("nexttrack"),
       canPrev: handlers.has("previoustrack"),
-      queue: readQueue()
-        .filter((q) => q.title)
-        .map(({ title, artist, artwork }) => ({ title, artist, artwork })),
+      queue: queueFor(title, meta?.artist ?? ""),
     }
   }
 
@@ -217,7 +253,7 @@ function install(ms: MediaSession | undefined) {
       last = ""
       report()
     } else if ("queue" in m) {
-      const rows = readQueue().filter((q) => q.title)
+      const rows = readQueue(ms?.metadata?.title || document.title).filter((q) => q.title)
       ;(rows[m.queue.index]?.title === m.queue.title ? rows[m.queue.index] : rows.find((q) => q.title === m.queue.title))?.play()
       setTimeout(report, 300)
     } else run(m.cmd)
@@ -225,6 +261,21 @@ function install(ms: MediaSession | undefined) {
 
   for (const type of ["play", "pause", "ended", "loadedmetadata"]) document.addEventListener(type, report, true)
   setInterval(report, 1000)
+
+  // Report the moment the page names a new track, instead of on the next tick of the
+  // poll, and once more shortly after for the queue, which the page redraws a beat later.
+  const meta = ms && Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ms), "metadata")
+  if (ms && meta?.set && meta.get) {
+    Object.defineProperty(ms, "metadata", {
+      configurable: true,
+      get: () => meta.get!.call(ms),
+      set: (v: MediaMetadata | null) => {
+        meta.set!.call(ms, v)
+        queueMicrotask(report)
+        setTimeout(report, 350)
+      },
+    })
+  }
 }
 
 const w = window as Window & { __discDeckHook?: true }
