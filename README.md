@@ -31,6 +31,14 @@ src/content/hook.ts  ──▶  src/content/bridge.ts  ──▶  src/background
 - **mini.ts** pops a 360×190 card into the tab you are looking at when a track starts or changes, or when you switch tabs while something plays. It stays until the music stops or you close it (closed stays closed for that track), sits bottom-right above the players' own bars, and can be dragged by its top strip; the spot is remembered. The card frames `src/mini` (the 3D disc carousel plus title and controls), created only while the card is showing. Toggle it with the picture-in-picture button in the side panel.
 - **Side panel** renders the tabs with `DiscCascadeCarousel` (album art becomes the disc label, the chosen disc spins while playing) and a lucide-react player bar.
 
+## Release
+
+```bash
+npm run package      # builds and writes disc-deck.zip, the file the Web Store takes
+```
+
+Bump `version` in `public/manifest.json` (and `package.json`) before each upload; the store refuses a version it has seen. The listing text, permission justifications and privacy answers are in [store/LISTING.md](store/LISTING.md), the privacy policy in [PRIVACY.md](PRIVACY.md). Icons are drawn by `npm run icons`.
+
 ## Project layout
 
 shadcn-style: components in `src/components/ui`, `cn()` in `src/lib/utils.ts`, Tailwind v4 via `@tailwindcss/vite`, `@/` → `src/`. Add shadcn components with `npx shadcn@latest add <name>`.
