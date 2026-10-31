@@ -26,18 +26,38 @@ const PREV_BUTTONS = [
   "tp-yt-paper-icon-button.previous-button",
 ]
 
-const QUEUE_MAX = 8
+// three discs behind the playing one: enough to see what's coming without crowding the card
+const QUEUE_MAX = 3
 
 // The page's own "Up next" list, read off its DOM. Each row knows how to start itself.
 type QueueRow = QueueItem & { play: () => void }
 
 const text = (root: Element, sel: string) => root.querySelector(sel)?.textContent?.trim() ?? ""
 
+// YouTube's rows are Polymer elements carrying the data they were drawn from; the hook
+// runs in the page's world, so it can read it. Shapes vary by row type, hence the loose type.
+type RowData = { thumbnail?: { thumbnails?: { url?: string }[] }; videoId?: string }
+function rowData(root: Element): RowData | undefined {
+  const el = root as Element & { data?: RowData; __data?: { data?: RowData } }
+  return el.data ?? el.__data?.data
+}
+
+/** A cover big enough for a disc label. */
+function bigger(url: string): string {
+  // YouTube Music's lh3 thumbnails take their size in the URL
+  return url.replace(/=w\d+-h\d+/, "=w544-h544").replace(/^\/\//, "https://")
+}
+
+// The <img> in a row only gets its picture once the row scrolls into view, so read the
+// cover from the row's data first, then fall back to the video's own thumbnail.
 function img(root: Element): string | undefined {
+  const d = rowData(root)
+  const thumbs = d?.thumbnail?.thumbnails?.filter((t) => t.url)
+  if (thumbs?.length) return bigger(thumbs[thumbs.length - 1].url!)
   const src = root.querySelector("img")?.src
-  if (!src || src.startsWith("data:")) return undefined
-  // YouTube Music hands out 60px thumbnails; ask for one big enough for a disc label
-  return src.replace(/=w\d+-h\d+/, "=w544-h544")
+  if (src && src.startsWith("http")) return bigger(src)
+  if (d?.videoId) return `https://i.ytimg.com/vi/${d.videoId}/hqdefault.jpg`
+  return undefined
 }
 
 /** Rows after the selected one, or every row when nothing is marked as playing. */
